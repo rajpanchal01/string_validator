@@ -1,0 +1,30 @@
+# Built gem
+*.gem
+pkg/
+
+# Bundler
+.bundle/
+vendor/bundle/
+Gemfile.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+.vscode/
+
+# Debug / test artifacts
+.byebug_history
+coverage/
+*.log
+tmp/
+
+# Local env (if you add one later)
+.env
+.env.*
