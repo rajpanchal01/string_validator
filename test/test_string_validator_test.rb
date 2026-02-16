@@ -108,4 +108,147 @@ class StringValidatorTest < Minitest::Test
     end
     assert StringValidator.valid?("a@b.co", :is_email?)
   end
+
+  def test_whitelist_with_ranges
+    assert_equal "abc123", StringValidator.whitelist("abc123", "a-c0-9")
+    assert_equal "123", StringValidator.whitelist("abc123", "0-9")
+  end
+
+  def test_is_port
+    assert StringValidator.is_port?("80")
+    assert StringValidator.is_port?("443")
+    assert StringValidator.is_port?("65535")
+    assert StringValidator.is_port?("0")
+    refute StringValidator.is_port?("65536")
+    refute StringValidator.is_port?("-1")
+    refute StringValidator.is_port?("not a port")
+  end
+
+  def test_is_iso8601
+    assert StringValidator.is_iso8601?("2024-01-15")
+    assert StringValidator.is_iso8601?("2024-01-15T12:00:00Z")
+    assert StringValidator.is_iso8601?("2024-01-15 12:00:00")
+    refute StringValidator.is_iso8601?("not a date")
+    refute StringValidator.is_iso8601?("2024-13-01")
+  end
+
+  def test_is_date
+    assert StringValidator.is_date?("2024-01-15")
+    assert StringValidator.is_date?("January 15, 2024")
+    refute StringValidator.is_date?("not a date")
+  end
+
+  def test_is_data_uri
+    assert StringValidator.is_data_uri?("data:image/png;base64,iVBORw0KGgo=")
+    assert StringValidator.is_data_uri?("data:text/plain;base64,SGVsbG8=")
+    refute StringValidator.is_data_uri?("http://example.com")
+  end
+
+  def test_is_sem_ver
+    assert StringValidator.is_sem_ver?("1.0.0")
+    assert StringValidator.is_sem_ver?("2.1.0-beta")
+    refute StringValidator.is_sem_ver?("1.0")
+    refute StringValidator.is_sem_ver?("v1.0.0")
+  end
+
+  def test_is_mongo_id
+    assert StringValidator.is_mongo_id?("507f1f77bcf86cd799439011")
+    refute StringValidator.is_mongo_id?("short")
+    refute StringValidator.is_mongo_id?("507f1f77bcf86cd79943901g")
+  end
+
+  def test_normalize_email
+    assert_equal "user@example.com", StringValidator.normalize_email("  User@Example.COM  ")
+    assert_equal "user@example.com", StringValidator.normalize_email("user@example.com")
+  end
+
+  def test_is_iban
+    # GB82 WEST 1234 5698 7654 32 is a valid test IBAN (mod 97)
+    assert StringValidator.is_iban?("GB82WEST12345698765432")
+    assert StringValidator.is_iban?("GB82 WEST 1234 5698 7654 32")
+    assert StringValidator.is_iban?("GB82WEST12345698765432", locale: "GB")
+    refute StringValidator.is_iban?("GB82WEST12345698765432", locale: "DE")
+    refute StringValidator.is_iban?("invalid")
+    refute StringValidator.is_iban?("GB82WEST1234569876543") # wrong length
+  end
+
+  def test_is_postal_code
+    assert StringValidator.is_postal_code?("12345", locale: "US")
+    assert StringValidator.is_postal_code?("12345-6789", locale: "US")
+    assert StringValidator.is_postal_code?("SW1A 1AA", locale: "GB")
+    assert StringValidator.is_postal_code?("K1A 0B1", locale: "CA")
+    assert StringValidator.is_postal_code?("10115", locale: "DE")
+    assert StringValidator.is_postal_code?("560001", locale: "IN")
+    refute StringValidator.is_postal_code?("1234", locale: "US")
+    refute StringValidator.is_postal_code?("invalid", locale: "US")
+    refute StringValidator.is_postal_code?("12345", locale: "XX")
+  end
+
+  def test_is_jwt
+    # Minimal valid JWT: header.payload.signature (each part base64url, header/payload valid JSON)
+    header = Base64.strict_encode64('{"alg":"HS256","typ":"JWT"}').tr("+/", "-_").delete("=")
+    payload = Base64.strict_encode64('{"sub":"123"}').tr("+/", "-_").delete("=")
+    sig = Base64.strict_encode64("signature").tr("+/", "-_").delete("=")
+    valid_jwt = "#{header}.#{payload}.#{sig}"
+    assert StringValidator.is_jwt?(valid_jwt)
+    refute StringValidator.is_jwt?("not.three.parts.here")
+    refute StringValidator.is_jwt?("a.b") # only 2 parts
+    refute StringValidator.is_jwt?("!!!.!!!.!!!") # invalid base64
+  end
+
+  # --- Error handling ---
+
+  def test_valid_raises_not_string_error
+    err = assert_raises(StringValidator::NotStringError) do
+      StringValidator.valid?(nil, :is_email?)
+    end
+    assert_match(/input must be a String/i, err.message)
+  end
+
+  def test_valid_raises_invalid_validator_error
+    err = assert_raises(StringValidator::InvalidValidatorError) do
+      StringValidator.valid?("x", :not_a_validator)
+    end
+    assert_match(/unknown validator/i, err.message)
+  end
+
+  def test_valid_succeeds_with_valid_input
+    assert StringValidator.valid?("a@b.co", :is_email?)
+  end
+
+  def test_contains_handles_nil_seed
+    refute StringValidator.contains?("hello", nil)
+  end
+
+  def test_equals_handles_nil_comparison
+    refute StringValidator.equals?("hello", nil)
+    assert StringValidator.equals?("hello", "hello")
+  end
+
+  def test_blacklist_handles_nil_chars
+    assert_equal "hello", StringValidator.blacklist("hello", nil)
+  end
+
+  def test_trim_handles_nil_chars
+    # When chars is nil, trim defaults to stripping whitespace
+    assert_equal "x", StringValidator.trim("  x  ", nil)
+    assert_equal "x", StringValidator.trim("  x  ")
+  end
+
+  def test_whitelist_handles_nil_chars
+    # When chars is nil, whitelist returns str unchanged (no filtering)
+    assert_equal "abc", StringValidator.whitelist("abc", nil)
+  end
+
+  def test_sanitizers_return_original_on_non_string
+    assert_nil StringValidator.trim(nil)
+    assert_nil StringValidator.blacklist(nil, "x")
+    assert_equal 42, StringValidator.to_int(42)
+  end
+
+  def test_validators_return_false_on_non_string
+    refute StringValidator.is_email?(nil)
+    refute StringValidator.is_email?(123)
+    refute StringValidator.is_url?([])
+  end
 end

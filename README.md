@@ -68,6 +68,15 @@ StringValidator.is_mac_address?("01:02:03:04:05:ab") # => true
 StringValidator.is_credit_card?("4111111111111111") # => true (Luhn check)
 StringValidator.is_md5?("d41d8cd98f00b204e9800998ecf8427e") # => true
 StringValidator.is_hexadecimal?("0a1f")       # => true
+StringValidator.is_port?("443")               # => true
+StringValidator.is_iso8601?("2024-01-15")    # => true
+StringValidator.is_date?("2024-01-15")        # => true
+StringValidator.is_data_uri?("data:image/png;base64,...") # => true
+StringValidator.is_sem_ver?("1.2.3")         # => true
+StringValidator.is_mongo_id?("507f1f77bcf86cd799439011") # => true
+StringValidator.is_iban?("GB82WEST12345698765432")       # => true (optional locale: "GB")
+StringValidator.is_postal_code?("12345", locale: "US")   # => true (US, GB, CA, DE, IN, etc.)
+StringValidator.is_jwt?("eyJhbGc...")                     # => true (structure only; no signature check)
 
 StringValidator.contains?("hello world", "world") # => true
 StringValidator.equals?("foo", "foo")          # => true
@@ -93,6 +102,7 @@ StringValidator.to_boolean("false")           # => false
 StringValidator.to_boolean("yes", strict: false) # => true
 StringValidator.to_int("42")                  # => 42
 StringValidator.to_float("3.14")              # => 3.14
+StringValidator.normalize_email(" User@Example.COM ") # => "user@example.com"
 
 StringValidator.unescape("&lt;tag&gt;")        # => "<tag>"
 ```
@@ -126,12 +136,20 @@ end
 
 ### Safe validation helper
 
-Raises `StringValidator::NotStringError` if the input is not a String:
+`valid?` enforces that the first argument is a String and that the validator name exists:
 
 ```ruby
 StringValidator.valid?("user@example.com", :is_email?) # => true
 StringValidator.valid?(nil, :is_email?)               # => raises NotStringError
+StringValidator.valid?("x", :not_a_validator)          # => raises InvalidValidatorError
 ```
+
+**Error classes** (all inherit from `StringValidator::Error`):
+
+- `StringValidator::NotStringError` — input to `valid?` is not a String
+- `StringValidator::InvalidValidatorError` — unknown validator name passed to `valid?`
+
+**Robustness:** Validators return `false` (and sanitizers return the original value) when given non-strings, `nil` where it would cause errors, or when parsing/encoding fails, so you can pass user input safely without rescuing.
 
 ## Supported Ruby
 
